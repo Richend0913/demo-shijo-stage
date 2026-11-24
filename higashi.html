@@ -50,7 +50,7 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 900);
-camera.position.set(-195, 1.7, 75);
+camera.position.set(49, 1.7, 100);
 
 const hemi = new THREE.HemisphereLight(0xbfd4e6, 0x54504a, 0.55);
 scene.add(hemi);
@@ -77,7 +77,7 @@ loader.load('higashi.glb', (gltf) => {
 });
 
 // look: drag; move: WASD / arrows / forward button
-let yaw = Math.atan2(-(24 - camera.position.x), -(-13 - camera.position.z));
+let yaw = 0.55;
 let pitch = 0.06;
 {
   const dx = -60 - camera.position.x, dz = 45 - camera.position.z;
@@ -103,6 +103,17 @@ fb.addEventListener('pointerdown', (e) => { e.preventDefault(); fwdHeld = true; 
 addEventListener('pointerup', () => fwdHeld = false);
 fb.addEventListener('pointerleave', () => fwdHeld = false);
 
+let HM = null, eyeY = 1.7;
+fetch('heightmap.json').then(r => r.json()).then(h => { HM = h; }).catch(() => {});
+function groundY(x, zThree) {
+  if (!HM) return 1.7;
+  const bx = x, by = -zThree;
+  const fx = Math.max(0, Math.min(HM.n - 1.001, (bx - HM.min) / HM.step));
+  const fy = Math.max(0, Math.min(HM.n - 1.001, (by - HM.min) / HM.step));
+  const x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+  const i = (yy, xx) => HM.z[yy * HM.n + xx];
+  return (i(y0, x0) * (1 - tx) + i(y0, x0 + 1) * tx) * (1 - ty) + (i(y0 + 1, x0) * (1 - tx) + i(y0 + 1, x0 + 1) * tx) * ty + 1.7;
+}
 const clock = new THREE.Clock();
 function tick() {
   requestAnimationFrame(tick);
@@ -122,10 +133,11 @@ function tick() {
     camera.position.x = Math.max(-880, Math.min(990, camera.position.x));
     camera.position.z = Math.max(-800, Math.min(880, camera.position.z));
   }
-  camera.position.y = 1.7;
+  eyeY += (groundY(camera.position.x, camera.position.z) - eyeY) * Math.min(1, dt * 10);
+  camera.position.y = eyeY;
   const look = new THREE.Vector3(
     camera.position.x - Math.sin(yaw) * Math.cos(pitch),
-    1.7 + Math.sin(pitch),
+    eyeY + Math.sin(pitch),
     camera.position.z - Math.cos(yaw) * Math.cos(pitch));
   camera.lookAt(look);
   renderer.render(scene, camera);
