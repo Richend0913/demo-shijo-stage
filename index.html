@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>四条烏丸ステージ（仮）</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b0e12; font-family: sans-serif; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+  #hud { position:fixed; left:12px; top:10px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.7); font-size:13px; line-height:1.5; pointer-events:none; z-index:5; }
+  #hud b { font-size:15px; }
+  #load { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:#dfe7ee; background:#0b0e12; font-size:15px; z-index:10; flex-direction:column; gap:10px; }
+  #fwd { position:fixed; right:18px; bottom:26px; width:74px; height:74px; border-radius:50%; border:1px solid rgba(255,255,255,.5);
+         background:rgba(20,26,34,.45); color:#fff; font-size:26px; z-index:6; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #fwd:active { background:rgba(70,90,110,.6); }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./js/three.module.js",
+  "three/addons/": "./js/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="load"><div>読み込み中…</div><div id="pct">0%</div></div>
+<div id="hud"><b>四条烏丸ステージ（仮）</b><br>ドラッグ: 視点 / WASD・矢印: 移動 / 右下ボタン長押し: 前進</div>
+<button id="fwd">▲</button>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xc3d2de);
+scene.fog = new THREE.Fog(0xc3d2de, 130, 460);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 900);
+camera.position.set(-11, 1.7, 16);
+
+const hemi = new THREE.HemisphereLight(0xbfd4e6, 0x54504a, 0.55);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe3b3, 2.4);
+sun.position.set(-45, 62, 34);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
+sun.shadow.camera.top = 110; sun.shadow.camera.bottom = -110;
+sun.shadow.camera.far = 260;
+sun.shadow.bias = -0.0004;
+scene.add(sun);
+scene.add(sun.target);
+
+const loader = new GLTFLoader();
+loader.load('stage.glb', (gltf) => {
+  gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(gltf.scene);
+  document.getElementById('load').style.display = 'none';
+}, (ev) => {
+  if (ev.total) document.getElementById('pct').textContent = Math.round(ev.loaded/ev.total*100) + '%';
+}, (err) => {
+  document.getElementById('pct').textContent = '読み込みエラー: ' + err.message;
+});
+
+// look: drag; move: WASD / arrows / forward button
+let yaw = Math.atan2(-(24 - camera.position.x), -(-13 - camera.position.z));
+let pitch = 0.06;
+{
+  const dx = 24 - camera.position.x, dz = -13 - camera.position.z;
+  yaw = Math.atan2(-dx, -dz);
+}
+let dragging = false, lx = 0, ly = 0, fwdHeld = false;
+const keys = {};
+addEventListener('keydown', (e) => keys[e.code] = true);
+addEventListener('keyup', (e) => keys[e.code] = false);
+const el = renderer.domElement;
+el.style.touchAction = 'none';
+el.addEventListener('pointerdown', (e) => { dragging = true; lx = e.clientX; ly = e.clientY; });
+addEventListener('pointerup', () => dragging = false);
+addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  yaw -= (e.clientX - lx) * 0.0032;
+  pitch -= (e.clientY - ly) * 0.0032;
+  pitch = Math.max(-1.2, Math.min(1.2, pitch));
+  lx = e.clientX; ly = e.clientY;
+});
+const fb = document.getElementById('fwd');
+fb.addEventListener('pointerdown', (e) => { e.preventDefault(); fwdHeld = true; });
+addEventListener('pointerup', () => fwdHeld = false);
+fb.addEventListener('pointerleave', () => fwdHeld = false);
+
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const speed = (keys.ShiftLeft || keys.ShiftRight) ? 22 : 8;
+  const sin = Math.sin(yaw), cos = Math.cos(yaw);
+  const f = new THREE.Vector3(-sin, 0, -cos);
+  const r = new THREE.Vector3(-f.z, 0, f.x);
+  const mv = new THREE.Vector3();
+  if (keys.KeyW || keys.ArrowUp || fwdHeld) mv.add(f);
+  if (keys.KeyS || keys.ArrowDown) mv.sub(f);
+  if (keys.KeyD || keys.ArrowRight) mv.add(r);
+  if (keys.KeyA || keys.ArrowLeft) mv.sub(r);
+  if (mv.lengthSq() > 0) {
+    mv.normalize().multiplyScalar(speed * dt);
+    camera.position.add(mv);
+    camera.position.x = Math.max(-90, Math.min(110, camera.position.x));
+    camera.position.z = Math.max(-80, Math.min(110, camera.position.z));
+  }
+  camera.position.y = 1.7;
+  const look = new THREE.Vector3(
+    camera.position.x - Math.sin(yaw) * Math.cos(pitch),
+    1.7 + Math.sin(pitch),
+    camera.position.z - Math.cos(yaw) * Math.cos(pitch));
+  camera.lookAt(look);
+  renderer.render(scene, camera);
+}
+tick();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
