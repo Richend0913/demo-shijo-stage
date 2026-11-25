@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>東神奈川ステージ（v2.1・運河側タワー）</title>
+<title>東神奈川ステージ（v2.2・実在再現）</title>
 <style>
   html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b0e12; font-family: sans-serif; }
   #app { position:fixed; inset:0; }
@@ -42,7 +42,7 @@ const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.28;
+renderer.toneMappingExposure = 1.12;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -102,6 +102,8 @@ makeLabel('西神奈川', -450, 14, -150);
 makeLabel('リーデンスフォート横浜', 98, 44, -9);
 makeLabel('マリナゲートタワー', 431, 136, 688);
 makeLabel('クリオレジダンス', 449, 44, 721);
+makeLabel('コットンハーバータワーズ', 455, 86, 816);
+makeLabel('ベイウエスト', 400, 130, 855);
 
 const hemi = new THREE.HemisphereLight(0xcfe5ff, 0x6b6257, 0.9);
 scene.add(hemi);
@@ -113,13 +115,19 @@ sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
 sun.shadow.camera.top = 110; sun.shadow.camera.bottom = -110;
 sun.shadow.camera.far = 260;
 sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 2.0;
 scene.add(sun);
 scene.add(sun.target);
 
 const loader = new GLTFLoader();
 loader.setMeshoptDecoder(MeshoptDecoder);
 loader.load('higashi.glb', (gltf) => {
-  gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true;
+    const nm = o.name || '';
+    if (nm === 'Terrain' && o.material && o.material.color) o.material.color.setRGB(0.40, 0.42, 0.36);
+    if ((nm === 'road' || nm === 'rail' || nm === 'Marking') && o.material) { o.material.polygonOffset = true; o.material.polygonOffsetFactor = -2; o.material.polygonOffsetUnits = -2; }
+    if (nm.startsWith('B_') && o.material) o.material.side = THREE.DoubleSide;
+  } });
   scene.add(gltf.scene);
   document.getElementById('load').style.display = 'none';
 }, (ev) => {
