@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>東神奈川ステージ（v1.6・両駅も輪郭ベース）</title>
+<title>東神奈川ステージ（v1.7・晴天ライティング）</title>
 <style>
   html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b0e12; font-family: sans-serif; }
   #app { position:fixed; inset:0; }
@@ -29,7 +29,7 @@
 <body>
 <div id="app"></div>
 <div id="load"><div>読み込み中…</div><div id="pct">0%</div></div>
-<div id="hud"><b>東神奈川ステージ（v1.6・両駅も輪郭ベース）</b><br>スタート: 駅前複合施設の南東の通り（正面にタワー・ホール・駅）<br>左スティック: 移動 / 右側ドラッグ: 視点 / 走るボタン: ダッシュ切替（PC: WASD・矢印＋Shift）</div>
+<div id="hud"><b>東神奈川ステージ（v1.7・晴天ライティング）</b><br>スタート: 駅前複合施設の南東の通り（正面にタワー・ホール・駅）<br>左スティック: 移動 / 右側ドラッグ: 視点 / 走るボタン: ダッシュ切替（PC: WASD・矢印＋Shift）</div>
 <div id="stick"><div id="knob"></div></div>
 <button id="run">走る</button>
 <script type="module">
@@ -41,15 +41,41 @@ const renderer = new THREE.WebGLRenderer({ antialias:true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.12;
+renderer.toneMappingExposure = 1.28;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('app').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xc3d2de);
-scene.fog = new THREE.Fog(0xc3d2de, 130, 460);
+scene.fog = new THREE.Fog(0xd7e9f7, 240, 820);
+// clear-day gradient sky dome with sun glow (sun dir matches the DirectionalLight below)
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: {
+    cZenith: { value: new THREE.Color(0x2e63c8) },
+    cHorizon: { value: new THREE.Color(0xd7e9f7) },
+    cGround: { value: new THREE.Color(0x9fb2bd) },
+    sunDir: { value: new THREE.Vector3(-45, 62, 34).normalize() },
+    cSun: { value: new THREE.Color(0xffe9bb) }
+  },
+  vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: [
+    'varying vec3 vDir; uniform vec3 cZenith; uniform vec3 cHorizon; uniform vec3 cGround; uniform vec3 sunDir; uniform vec3 cSun;',
+    'void main(){',
+    '  float h = clamp(vDir.y, -1.0, 1.0);',
+    '  vec3 col = h >= 0.0 ? mix(cHorizon, cZenith, pow(h, 0.55)) : mix(cHorizon, cGround, pow(-h, 0.6));',
+    '  float s = max(dot(normalize(vDir), sunDir), 0.0);',
+    '  col += cSun * (pow(s, 600.0) * 1.6 + pow(s, 10.0) * 0.16);',
+    '  gl_FragColor = vec4(col, 1.0);',
+    '  #include <tonemapping_fragment>',
+    '  #include <colorspace_fragment>',
+    '}'
+  ].join('\n')
+});
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(700, 32, 16), skyMat);
+skyDome.frustumCulled = false;
+scene.add(skyDome);
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
@@ -74,9 +100,9 @@ makeLabel('東神奈川運河', 430, 12, 60);
 makeLabel('西神奈川', -450, 14, -150);
 makeLabel('リーデンスフォート横浜', 98, 44, -9);
 
-const hemi = new THREE.HemisphereLight(0xbfd4e6, 0x54504a, 0.55);
+const hemi = new THREE.HemisphereLight(0xcfe5ff, 0x6b6257, 0.9);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(0xffe3b3, 2.4);
+const sun = new THREE.DirectionalLight(0xffe3b3, 2.9);
 sun.position.set(-45, 62, 34);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -187,6 +213,7 @@ function groundY(x, zThree) {
 const clock = new THREE.Clock();
 function tick() {
   requestAnimationFrame(tick);
+  skyDome.position.set(camera.position.x, 0, camera.position.z);
   const dt = Math.min(clock.getDelta(), 0.05);
   const speed = (runOn || keys.ShiftLeft || keys.ShiftRight) ? 20 : 8;
   const sin = Math.sin(yaw), cos = Math.cos(yaw);
