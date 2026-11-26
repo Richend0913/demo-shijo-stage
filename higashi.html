@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>東神奈川ステージ（v2.6・車線数の精度）</title>
+<title>東神奈川ステージ（v2.7・歩道と車道の隙間）</title>
 <style>
   html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b0e12; font-family: sans-serif; }
   #app { position:fixed; inset:0; }
@@ -29,7 +29,7 @@
 <body>
 <div id="app"></div>
 <div id="load"><div>読み込み中…</div><div id="pct">0%</div></div>
-<div id="hud"><b>東神奈川ステージ（v2.6・車線数の精度）</b><br>スタート: 駅前複合施設の南東の通り（正面にタワー・ホール・駅）<br>左スティック: 移動 / 右側ドラッグ: 視点 / 走るボタン: ダッシュ切替（PC: WASD・矢印＋Shift）</div>
+<div id="hud"><b>東神奈川ステージ（v2.7・歩道と車道の隙間）</b><br>スタート: 駅前複合施設の南東の通り（正面にタワー・ホール・駅）<br>左スティック: 移動 / 右側ドラッグ: 視点 / 走るボタン: ダッシュ切替（PC: WASD・矢印＋Shift）</div>
 <div id="stick"><div id="knob"></div></div>
 <button id="run">走る</button>
 <script type="module">
@@ -82,7 +82,7 @@ const pmrem = new THREE.PMREMGenerator(renderer);
 scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
 const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 900);
-camera.position.set(135, 1.7, 150);
+camera.position.set(105, 1.7, 114);
 function makeLabel(text, x, y, z, s = 1) {
   const c = document.createElement('canvas'); c.width = 512; c.height = 128;
   const g = c.getContext('2d');
