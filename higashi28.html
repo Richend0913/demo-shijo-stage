@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>東神奈川ステージ（v2.8・交差点の角）</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; overflow:hidden; background:#0b0e12; font-family: sans-serif; }
+  #app { position:fixed; inset:0; }
+  canvas { display:block; }
+  #hud { position:fixed; left:12px; top:10px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.7); font-size:13px; line-height:1.5; pointer-events:none; z-index:5; }
+  #hud b { font-size:15px; }
+  #load { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:#dfe7ee; background:#0b0e12; font-size:15px; z-index:10; flex-direction:column; gap:10px; }
+  #stick { position:fixed; left:22px; bottom:26px; width:118px; height:118px; border-radius:50%; border:1.5px solid rgba(255,255,255,.55);
+         background:rgba(20,26,34,.35); z-index:6; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #knob { position:absolute; left:50%; top:50%; width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,.55);
+         transform:translate(-50%,-50%); pointer-events:none; }
+  #run { position:fixed; right:18px; bottom:26px; padding:14px 18px; border-radius:28px; border:1px solid rgba(255,255,255,.5);
+         background:rgba(20,26,34,.45); color:#fff; font-size:16px; z-index:6; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #run.on { background:rgba(46,120,70,.75); }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "./js/three.module.js",
+  "three/addons/": "./js/"
+} }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="load"><div>読み込み中…</div><div id="pct">0%</div></div>
+<div id="hud"><b>東神奈川ステージ（v2.8・交差点の角）</b><br>スタート: 駅前複合施設の南東の通り（正面にタワー・ホール・駅）<br>左スティック: 移動 / 右側ドラッグ: 視点 / 走るボタン: ダッシュ切替（PC: WASD・矢印＋Shift）</div>
+<div id="stick"><div id="knob"></div></div>
+<button id="run">走る</button>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('app').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xd7e9f7, 240, 820);
+// clear-day gradient sky dome with sun glow (sun dir matches the DirectionalLight below)
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: {
+    cZenith: { value: new THREE.Color(0x2e63c8) },
+    cHorizon: { value: new THREE.Color(0xd7e9f7) },
+    cGround: { value: new THREE.Color(0x9fb2bd) },
+    sunDir: { value: new THREE.Vector3(-45, 62, 34).normalize() },
+    cSun: { value: new THREE.Color(0xffe9bb) }
+  },
+  vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: [
+    'varying vec3 vDir; uniform vec3 cZenith; uniform vec3 cHorizon; uniform vec3 cGround; uniform vec3 sunDir; uniform vec3 cSun;',
+    'void main(){',
+    '  float h = clamp(vDir.y, -1.0, 1.0);',
+    '  vec3 col = h >= 0.0 ? mix(cHorizon, cZenith, pow(h, 0.55)) : mix(cHorizon, cGround, pow(-h, 0.6));',
+    '  float s = max(dot(normalize(vDir), sunDir), 0.0);',
+    '  col += cSun * (pow(s, 600.0) * 1.6 + pow(s, 10.0) * 0.16);',
+    '  gl_FragColor = vec4(col, 1.0);',
+    '  #include <tonemapping_fragment>',
+    '  #include <colorspace_fragment>',
+    '}'
+  ].join('\n')
+});
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(700, 32, 16), skyMat);
+skyDome.frustumCulled = false;
+scene.add(skyDome);
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 900);
+camera.position.set(105, 1.7, 114);
+function makeLabel(text, x, y, z, s = 1) {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128;
+  const g = c.getContext('2d');
+  g.font = 'bold 54px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineWidth = 10; g.strokeStyle = 'rgba(20,24,28,0.85)';
+  g.strokeText(text, 256, 64); g.fillStyle = '#ffffff'; g.fillText(text, 256, 64);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), depthTest: false, transparent: true }));
+  sp.position.set(x, y, z); sp.scale.set(36 * s, 9 * s, 1); sp.renderOrder = 999;
+  scene.add(sp);
+}
+makeLabel('東神奈川駅', -4, 22, -19);
+makeLabel('かなっくホール', 0, 17, 60);
+makeLabel('ブリリアタワー', 32, 46, 86);
+makeLabel('国道15号', 330, 14, 160);
+makeLabel('東神奈川運河', 430, 12, 60);
+makeLabel('西神奈川', -450, 14, -150);
+makeLabel('リーデンスフォート横浜', 98, 44, -9);
+makeLabel('マリナゲートタワー', 431, 136, 688);
+makeLabel('クリオレジダンス', 449, 44, 721);
+makeLabel('コットンハーバータワーズ', 455, 86, 816);
+makeLabel('ベイウエスト', 400, 130, 855);
+
+const hemi = new THREE.HemisphereLight(0xcfe5ff, 0x6b6257, 0.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe3b3, 2.9);
+sun.position.set(-45, 62, 34);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -110; sun.shadow.camera.right = 110;
+sun.shadow.camera.top = 110; sun.shadow.camera.bottom = -110;
+sun.shadow.camera.far = 260;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 2.0;
+scene.add(sun);
+scene.add(sun.target);
+
+const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
+loader.load('higashi_v28.glb', (gltf) => {
+  gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true;
+    const nm = o.name || '';
+    if (nm === 'Terrain' && o.material && o.material.color) o.material.color.setRGB(0.40, 0.42, 0.36);
+    if ((nm === 'road' || nm === 'rail' || nm === 'Marking' || nm === 'Sidewalk') && o.material) { o.material.polygonOffset = true; o.material.polygonOffsetFactor = -2; o.material.polygonOffsetUnits = -2; }
+    if ((nm.startsWith('B_') || nm === 'Sidewalk' || nm === 'Fence') && o.material) o.material.side = THREE.DoubleSide;
+  } });
+  scene.add(gltf.scene);
+  document.getElementById('load').style.display = 'none';
+}, (ev) => {
+  if (ev.total) document.getElementById('pct').textContent = Math.round(ev.loaded/ev.total*100) + '%';
+}, (err) => {
+  document.getElementById('pct').textContent = '読み込みエラー: ' + err.message;
+});
+
+// look: drag; move: WASD / arrows / forward button
+let yaw = 0.55;
+let pitch = 0.06;
+{
+  const dx = 10 - camera.position.x, dz = 40 - camera.position.z;
+  yaw = Math.atan2(-dx, -dz);
+}
+const keys = {};
+addEventListener('keydown', (e) => keys[e.code] = true);
+addEventListener('keyup', (e) => keys[e.code] = false);
+const el = renderer.domElement;
+el.style.touchAction = 'none';
+// left stick = move, right-side drag = look
+const stickEl = document.getElementById('stick');
+const knobEl = document.getElementById('knob');
+let stickId = null, stickVec = { x: 0, y: 0 };
+let lookId = null, lx = 0, ly = 0;
+function stickCenter() { const r = stickEl.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, rad: r.width / 2 }; }
+function setKnob(dx, dy) { knobEl.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))'; }
+el.addEventListener('pointerdown', (e) => {
+  const c = stickCenter();
+  const nearStick = Math.hypot(e.clientX - c.x, e.clientY - c.y) < c.rad + 26;
+  if (e.pointerType !== 'mouse' && (nearStick || e.clientX < innerWidth * 0.42) && stickId === null) {
+    stickId = e.pointerId;
+    const dx = e.clientX - c.x, dy = e.clientY - c.y;
+    const m = Math.hypot(dx, dy), lim = 40;
+    const k = m > lim ? lim / m : 1;
+    stickVec = { x: dx * k / lim, y: dy * k / lim };
+    setKnob(dx * k, dy * k);
+  } else if (lookId === null) { lookId = e.pointerId; lx = e.clientX; ly = e.clientY; }
+});
+addEventListener('pointermove', (e) => {
+  if (e.pointerId === stickId) {
+    const c = stickCenter();
+    const dx = e.clientX - c.x, dy = e.clientY - c.y;
+    const m = Math.hypot(dx, dy), lim = 40;
+    const k = m > lim ? lim / m : 1;
+    stickVec = { x: dx * k / lim, y: dy * k / lim };
+    setKnob(dx * k, dy * k);
+  } else if (e.pointerId === lookId) {
+    yaw -= (e.clientX - lx) * 0.0034;
+    pitch -= (e.clientY - ly) * 0.0034;
+    pitch = Math.max(-1.2, Math.min(1.2, pitch));
+    lx = e.clientX; ly = e.clientY;
+  }
+});
+function endPointer(e) {
+  if (e.pointerId === stickId) { stickId = null; stickVec = { x: 0, y: 0 }; setKnob(0, 0); }
+  if (e.pointerId === lookId) lookId = null;
+}
+addEventListener('pointerup', endPointer);
+addEventListener('pointercancel', endPointer);
+let runOn = false;
+const runBtn = document.getElementById('run');
+runBtn.addEventListener('click', () => { runOn = !runOn; runBtn.classList.toggle('on', runOn); runBtn.textContent = runOn ? '走行中' : '走る'; });
+// building collision (footprints)
+let FP = null;
+fetch('footprints.json').then(r => r.json()).then(f => { FP = f; }).catch(() => {});
+function pipF(x, z, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], zi = poly[i][1], xj = poly[j][0], zj = poly[j][1];
+    if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function blocked(x, z) {
+  if (!FP) return false;
+  for (const b of FP) {
+    if (Math.abs(b.p[0][0] - x) > 260) continue;
+    if (pipF(x, z, b.p) || pipF(x + 0.4, z, b.p) || pipF(x - 0.4, z, b.p) || pipF(x, z + 0.4, b.p) || pipF(x, z - 0.4, b.p)) return true;
+  }
+  return false;
+}
+
+let HM = null, eyeY = 1.7;
+fetch('heightmap.json').then(r => r.json()).then(h => { HM = h; }).catch(() => {});
+function groundY(x, zThree) {
+  if (!HM) return 1.7;
+  const bx = x, by = -zThree;
+  const fx = Math.max(0, Math.min(HM.n - 1.001, (bx - HM.min) / HM.step));
+  const fy = Math.max(0, Math.min(HM.n - 1.001, (by - HM.min) / HM.step));
+  const x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+  const i = (yy, xx) => HM.z[yy * HM.n + xx];
+  return (i(y0, x0) * (1 - tx) + i(y0, x0 + 1) * tx) * (1 - ty) + (i(y0 + 1, x0) * (1 - tx) + i(y0 + 1, x0 + 1) * tx) * ty + 1.7;
+}
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  skyDome.position.set(camera.position.x, 0, camera.position.z);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const speed = (runOn || keys.ShiftLeft || keys.ShiftRight) ? 20 : 8;
+  const sin = Math.sin(yaw), cos = Math.cos(yaw);
+  const f = new THREE.Vector3(-sin, 0, -cos);
+  const r = new THREE.Vector3(-f.z, 0, f.x);
+  const mv = new THREE.Vector3();
+  if (keys.KeyW || keys.ArrowUp) mv.add(f);
+  if (keys.KeyS || keys.ArrowDown) mv.sub(f);
+  if (keys.KeyD || keys.ArrowRight) mv.add(r);
+  if (keys.KeyA || keys.ArrowLeft) mv.sub(r);
+  if (stickId !== null) { mv.addScaledVector(f, -stickVec.y); mv.addScaledVector(r, stickVec.x); }
+  if (mv.lengthSq() > 0) {
+    if (mv.length() > 1) mv.normalize();
+    mv.multiplyScalar(speed * dt);
+    const nx = camera.position.x + mv.x, nz = camera.position.z + mv.z;
+    if (!blocked(nx, nz)) { camera.position.x = nx; camera.position.z = nz; }
+    else if (!blocked(nx, camera.position.z)) camera.position.x = nx;
+    else if (!blocked(camera.position.x, nz)) camera.position.z = nz;
+    camera.position.x = Math.max(-880, Math.min(990, camera.position.x));
+    camera.position.z = Math.max(-800, Math.min(880, camera.position.z));
+  }
+  eyeY += (groundY(camera.position.x, camera.position.z) - eyeY) * Math.min(1, dt * 10);
+  camera.position.y = eyeY;
+  const look = new THREE.Vector3(
+    camera.position.x - Math.sin(yaw) * Math.cos(pitch),
+    eyeY + Math.sin(pitch),
+    camera.position.z - Math.cos(yaw) * Math.cos(pitch));
+  camera.lookAt(look);
+  renderer.render(scene, camera);
+}
+tick();
+addEventListener('resize', () => {
+  camera.aspect = innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
